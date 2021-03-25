@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[derive(Clap)]
 #[clap(version = "1.0", author)]
 pub struct Opts {
-    /// Directory that stores portfolio files
+    /// Directory for portfolio files
     #[clap(short, long)]
     pub directory: Option<PathBuf>,
     #[clap(subcommand)]
@@ -15,24 +15,16 @@ pub struct Opts {
 
 #[derive(Clap)]
 pub enum SubCommand {
-    Init(Init),
-    Check(Check),
-    List(List)
-}
-
-/// Check that all portfolio files are well formed
-#[derive(Clap)]
-pub struct Check {
-}
-
-/// List all trades in the portfolio
-#[derive(Clap)]
-pub struct List {
-}
-
-/// Initialize the portfolio directory
-#[derive(Clap)]
-pub struct Init {
+    /// Initialize the portfolio directory
+    Init {
+        /// Wipes out existing directory
+        #[clap(short, long)]
+        force: bool
+    },
+    /// Check that all portfolio files are well formed
+    Check {},
+    /// List all trades in the portfolio
+    List {}
 }
 
 pub fn parse_args() -> Opts {

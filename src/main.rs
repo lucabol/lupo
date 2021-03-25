@@ -25,8 +25,8 @@ fn run() -> Result<()> {
     let opts = parse_args();
 
     match &opts.subcmd {
-        SubCommand::Init(_) => init(opts).chain_err(|| "Error in Init"),
-        SubCommand::Check(_) => check(&opts),
-        SubCommand::List(_) => todo!() 
+        SubCommand::Init  { force} => init(opts).chain_err(|| "Error in Init"),
+        SubCommand::Check {} => check(&opts),
+        SubCommand::List  {} => todo!() 
     }
 }
