@@ -9,6 +9,17 @@ pub struct Opts {
     /// Directory for portfolio files
     #[clap(short, long)]
     pub directory: Option<PathBuf>,
+    
+    #[clap(short, long)]
+    pub quiet: bool,
+    /// Verbose mode (-v, -vv, -vvv, etc)
+    #[clap(short, long, parse(from_occurrences))]
+    pub verbose: usize,
+    /// Timestamp (sec, ms, ns, none)
+    #[clap(short, long)]
+    pub ts: Option<stderrlog::Timestamp>,
+
+
     #[clap(subcommand)]
     pub subcmd: SubCommand,
 }
