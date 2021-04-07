@@ -9,7 +9,7 @@ pub struct Opts {
     /// Directory for portfolio files
     #[clap(short, long)]
     pub directory: Option<PathBuf>,
-    
+
     #[clap(short, long)]
     pub quiet: bool,
     /// Verbose mode (-v, -vv, -vvv, etc)
@@ -18,7 +18,6 @@ pub struct Opts {
     /// Timestamp (sec, ms, ns, none)
     #[clap(short, long)]
     pub ts: Option<stderrlog::Timestamp>,
-
 
     #[clap(subcommand)]
     pub subcmd: SubCommand,
@@ -30,12 +29,12 @@ pub enum SubCommand {
     Init {
         /// Wipes out existing directory
         #[clap(short, long)]
-        force: bool
+        force: bool,
     },
     /// Check that all portfolio files are well formed
     Check {},
     /// List all trades in the portfolio
-    List {}
+    Trades { name_substring: Option<String> },
 }
 
 pub fn parse_args() -> Opts {

@@ -4,7 +4,7 @@
 		{
 			"type": "shell",
 			"command": "cargo",
-			"args": ["run", "--", "init"],
+			"args": ["run", "--", "-v", "check"],
 			"problemMatcher": [
 				"$rustc"
 			],

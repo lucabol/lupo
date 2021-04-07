@@ -1,28 +1,13 @@
-#![recursion_limit = "1024"]
-
-#[macro_use]
-extern crate error_chain;
-
-mod errors {
-    error_chain! {}
-}
-
-use errors::*;
 use log::error;
 
 mod args;
-mod common;
-mod check;
-mod init;
-
-
 use args::*;
-use check::check;
-use init::init;
+
+use lupo::errors::*;
+use lupo::*;
 
 fn main() {
     if let Err(ref e) = run() {
-
         let mut s = e.to_string();
 
         for e in e.iter().skip(1) {
@@ -45,16 +30,29 @@ fn run() -> Result<()> {
 
     stderrlog::new()
         .module(module_path!())
+        .show_level(false)
         .quiet(opts.quiet)
-        .verbosity(opts.verbose + 1)
+        .verbosity(opts.verbose + 1) // The user needs warnings
         .timestamp(opts.ts.unwrap_or(stderrlog::Timestamp::Off))
         .init()
         .unwrap();
-    
-    match &opts.subcmd {
-        SubCommand::Init  { force} =>
-            init(&opts.directory.unwrap(), force),
-        SubCommand::Check {} => check(&opts),
-        SubCommand::List  {} => todo!() 
+
+    let home_dir = &opts.directory.unwrap();
+
+    match opts.subcmd {
+        SubCommand::Init { force } => {
+            let _ = Store::new(home_dir, force)?;
+            Ok(())
+        }
+        SubCommand::Check {} => {
+            let store = Store::open(home_dir)?;
+            store.check()?;
+            Ok(())
+        }
+        SubCommand::Trades { name_substring } => {
+            let store = Store::open(home_dir)?;
+            store.trades(name_substring)?;
+            Ok(())
+        }
     }
 }

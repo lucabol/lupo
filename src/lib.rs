@@ -1,0 +1,185 @@
+#![recursion_limit = "1024"]
+use std::{fmt, fs, io, path};
+
+use chrono::{DateTime, Utc};
+use log::{info, warn};
+use serde::Deserialize;
+
+use crate::errors::*;
+
+pub mod errors {
+    error_chain::error_chain! {}
+}
+
+pub const TRADES_FILE: &str = "trades.tsv";
+pub const STOCKS_FILE: &str = "stocks.tsv";
+
+pub struct Store<'a> {
+    home_dir: &'a path::Path,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum TradeType {
+    Buy,
+    Sell,
+    TrIn,
+    Div,
+    TrOut,
+    Split,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Trade {
+    pub account: String,
+    #[serde(with = "my_date_format")]
+    pub date: DateTime<Utc>,
+    pub r#type: TradeType,
+    pub stock: String,
+    pub units: f64,
+    pub price: Option<f64>,
+    pub fees: Option<f64>,
+    pub split: f64,
+    pub currency: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Stocks {
+    pub name: String,
+    pub asset: String,
+    pub group: String,
+    pub tags: String,
+    pub riskyness: String,
+    pub ticker: String,
+    pub tradedcurrency: String,
+    pub currencyunderlying: String,
+}
+
+mod my_date_format {
+    use chrono::{DateTime, TimeZone, Utc};
+    use serde::{self, Deserialize, Deserializer};
+
+    const FORMAT: &'static str = "%Y/%m/%d %H:%M:%S";
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let ks = s + " 00:00:00";
+        Utc.datetime_from_str(&ks, FORMAT)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl fmt::Display for Trade {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:<12}{:<8?}{}{}{}{}",
+            self.date.format("%Y/%m/%d"),
+            self.r#type,
+            self.units,
+            self.stock,
+            self.price.unwrap_or_default(),
+            self.fees.unwrap_or_default()
+        )
+    }
+}
+
+impl Store<'_> {
+    pub fn load_trades(&self) -> Result<impl Iterator<Item = Result<Trade>>> {
+        self.load_csv(TRADES_FILE)
+    }
+    pub fn load_stocks(&self) -> Result<impl Iterator<Item = Result<Stocks>>> {
+        self.load_csv(STOCKS_FILE)
+    }
+
+    fn load_csv<T>(&self, file_name: &str) -> Result<impl Iterator<Item = Result<T>>>
+    where
+        T: for<'de> serde::Deserialize<'de>,
+    {
+        let rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .flexible(true)
+            .trim(csv::Trim::All)
+            .comment(Some(b'#'))
+            .from_path(self.home_dir.join(file_name))
+            .chain_err(|| "Cannot open trades file")?;
+
+        Ok(rdr
+            .into_deserialize()
+            .map(|r| r.chain_err(|| "Badly formatted csv")))
+    }
+
+    pub fn trades(&self, name_substring: Option<String>) -> Result<()> {
+        let trades = self.load_trades()?;
+        let s = name_substring.unwrap_or_default();
+        for t in trades {
+            let k = t?;
+            if k.stock.contains(&s) {
+                println!("{}", k);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn check(&self) -> Result<()> {
+        let stocks = self.load_stocks()?;
+
+        let trades = self.load_trades()?;
+        for t in trades {
+            let k = t?;
+            println!("{:?}", k);
+        }
+        //info!("{} trades processed correctly.", trades.count());
+        info!("{} stocks processed correctly.", stocks.count());
+        Ok(())
+    }
+
+    fn create_file_if_not_exist(&self, file_name: &str) -> crate::errors::Result<()> {
+        let res = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(self.home_dir.join(file_name));
+        match &res {
+            Ok(_) => info!("{}: file created", file_name),
+            Err(e) => {
+                if e.kind() == io::ErrorKind::AlreadyExists {
+                    warn!("{}: file already exists", file_name);
+                } else {
+                    res.chain_err(|| format!("{}: error creating the file", file_name))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn open(home_dir: &path::Path) -> Result<Store> {
+        if home_dir.is_dir() {
+            Ok(Store { home_dir })
+        } else {
+            error_chain::bail!("Can't find home directory {}", home_dir.to_string_lossy())
+        }
+    }
+
+    pub fn new(home_dir: &path::Path, force: bool) -> Result<Store> {
+        if force && home_dir.is_dir() {
+            fs::remove_dir_all(&home_dir).chain_err(|| "Could not remove portfolio directory")?;
+        }
+        let home_dir_str = home_dir.to_string_lossy();
+
+        let _ = fs::create_dir_all(&home_dir)
+            .chain_err(|| format!("Can't create porfolio directory at {}", home_dir_str));
+
+        info!("data dir: {}", home_dir_str);
+        let store = Store { home_dir };
+
+        let _ = store.create_file_if_not_exist(STOCKS_FILE)?;
+        let _ = store.create_file_if_not_exist(TRADES_FILE)?;
+
+        info!("{}", "Portfolio directory initialized correctly.");
+        Ok(store)
+    }
+}
