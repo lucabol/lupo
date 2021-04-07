@@ -110,7 +110,7 @@ impl Store<'_> {
 
         Ok(rdr
             .into_deserialize()
-            .map(|r| r.chain_err(|| "Badly formatted csv")))
+            .map(|r| r.chain_err(|| "Badly formatted csv.")))
     }
 
     pub fn trades(&self, name_substring: Option<String>) -> Result<()> {
@@ -126,15 +126,22 @@ impl Store<'_> {
     }
 
     pub fn check(&self) -> Result<()> {
-        let stocks = self.load_stocks()?;
+        let mut stocks = self.load_stocks()?;
+        let mut trades = self.load_trades()?;
 
-        let trades = self.load_trades()?;
-        for t in trades {
-            let k = t?;
-            println!("{:?}", k);
-        }
-        //info!("{} trades processed correctly.", trades.count());
-        info!("{} stocks processed correctly.", stocks.count());
+        // I need to explicitely deserialize trades & stocks to catch errors
+        let ct = trades.try_fold(0, |count, t: Result<Trade>| -> Result<i32> {
+            let _ = t?;
+            Ok(count + 1)
+        })?;
+
+        let cs = stocks.try_fold(0, |count, t: Result<Stocks>| -> Result<i32> {
+            let _ = t?;
+            Ok(count + 1)
+        })?;
+
+        println!("{} trades processed correctly.", ct);
+        println!("{} stocks processed correctly.", cs);
         Ok(())
     }
 
@@ -173,13 +180,12 @@ impl Store<'_> {
         let _ = fs::create_dir_all(&home_dir)
             .chain_err(|| format!("Can't create porfolio directory at {}", home_dir_str));
 
-        info!("data dir: {}", home_dir_str);
         let store = Store { home_dir };
 
         let _ = store.create_file_if_not_exist(STOCKS_FILE)?;
         let _ = store.create_file_if_not_exist(TRADES_FILE)?;
 
-        info!("{}", "Portfolio directory initialized correctly.");
+        println!("Created data directory in {}", home_dir_str);
         Ok(store)
     }
 }
