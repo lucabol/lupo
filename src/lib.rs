@@ -32,12 +32,12 @@ pub enum TradeType {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Trade<'a> {
-    pub account: &'a str,
+pub struct Trade {
+    pub account: String,
     #[serde(with = "my_date_format")]
     pub date: DateTime<Utc>,
     pub r#type: TradeType,
-    pub stock: &'a str,
+    pub stock: String,
     pub units: f64,
     pub price: Option<f64>,
     pub fees: Option<f64>,
@@ -47,32 +47,32 @@ pub struct Trade<'a> {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Stocks<'a> {
-    pub name: &'a str,
-    pub asset: &'a str,
-    pub group: &'a str,
-    pub tags: &'a str,
-    pub riskyness: &'a str,
-    pub ticker: Option<&'a str>,
-    pub tradedcurrency: &'a str,
-    pub currencyunderlying: &'a str,
+pub struct Stocks {
+    pub name: String,
+    pub asset: String,
+    pub group: String,
+    pub tags: String,
+    pub riskyness: String,
+    pub ticker: Option<String>,
+    pub tradedcurrency: String,
+    pub currencyunderlying: String,
 }
 
 #[derive(Debug)]
-pub struct PortLine<'a> {
-    pub ticker: Option<&'a str>,
-    pub name: &'a str,
-    pub currency: &'a str,
-    pub asset: &'a str,
-    pub group: &'a str,
-    pub tags: &'a str,
-    pub riskyness: &'a str,
+pub struct PortLine {
+    pub ticker: Option<String>,
+    pub name: String,
+    pub currency: String,
+    pub asset: String,
+    pub group: String,
+    pub tags: String,
+    pub riskyness: String,
     pub units: f64,
     pub gain: f64,
 }
 
-impl<'a> PortLine<'a> {
-    fn from(s: &'a Stocks) -> PortLine<'a> {
+impl PortLine {
+    fn from(s: Stocks) -> PortLine {
         PortLine {
             ticker: s.ticker,
             name: s.name,
@@ -120,7 +120,7 @@ impl fmt::Display for TradeType {
     }
 }
 
-impl fmt::Display for Trade<'_> {
+impl fmt::Display for Trade {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -136,7 +136,7 @@ impl fmt::Display for Trade<'_> {
     }
 }
 
-impl fmt::Display for PortLine<'_> {
+impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -218,9 +218,9 @@ impl Store<'_> {
         let stocks = self.load_stocks()?;
         let trades = self.load_trades()?;
 
-        let mut lines: HashMap<_, _> = stocks
-            .iter()
-            .map(|s| (&s.name, PortLine::from(&s)))
+        let mut lines: HashMap<String, _> = stocks
+            .into_iter()
+            .map(|s| (s.name.clone(), PortLine::from(s)))
             .collect();
 
         trades.into_iter().for_each(|t| {
