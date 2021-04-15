@@ -6,7 +6,23 @@ use args::*;
 use lupo::errors::*;
 use lupo::*;
 
+// Rust doesn't trap a unix signal appropriately occasionally: https://github.com/rust-lang/rust/issues/46016
+fn reset_signal_pipe_handler() -> Result<()> {
+    #[cfg(target_family = "unix")]
+    {
+        use nix::sys::signal;
+
+        unsafe {
+            signal::signal(signal::Signal::SIGPIPE, signal::SigHandler::SigDfl)
+                .chain_err(|| "Internal error: cannot trap signal")?;
+        }
+    }
+
+    Ok(())
+}
 fn main() {
+    reset_signal_pipe_handler().unwrap();
+
     if let Err(ref e) = run() {
         let mut s = e.to_string();
 
@@ -41,17 +57,27 @@ fn run() -> Result<()> {
 
     match opts.subcmd {
         SubCommand::Init { force } => {
-            let _ = Store::new(home_dir, force)?;
+            let store = Store::new(home_dir, force)?;
+            println!("Data directory: {}", store.home_dir.to_string_lossy());
             Ok(())
         }
         SubCommand::Check {} => {
             let store = Store::open(home_dir)?;
-            store.check()?;
+            let (ct, cs) = store.check()?;
+            println!("{} trades processed correctly.", ct);
+            println!("{} stocks processed correctly.", cs);
             Ok(())
         }
         SubCommand::Trades { name_substring } => {
             let store = Store::open(home_dir)?;
-            store.trades(name_substring)?;
+            let trades = store.trades(name_substring)?;
+            trades.iter().for_each(|t| println!("{}", t));
+            Ok(())
+        }
+        SubCommand::Port {} => {
+            let store = Store::open(home_dir)?;
+            let port_lines = store.port()?;
+            port_lines.iter().for_each(|l| println!("{:}", l));
             Ok(())
         }
     }
