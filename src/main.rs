@@ -70,8 +70,7 @@ fn run() -> Result<()> {
         }
         SubCommand::Trades { name_substring } => {
             let store = Store::open(home_dir)?;
-            let trades = store.trades(name_substring)?;
-            trades.iter().for_each(|t| println!("{}", t));
+            store.trades(name_substring)?;
             Ok(())
         }
         SubCommand::Port {} => {

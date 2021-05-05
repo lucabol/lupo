@@ -72,9 +72,9 @@ pub struct PortLine {
 }
 
 impl PortLine {
-    fn from(s: Stocks) -> PortLine {
+    fn from(s: &Stocks) -> PortLine {
         PortLine {
-            ticker: s.ticker.map(|s| s.to_owned()),
+            ticker: s.ticker.as_ref().map(|s| s.to_owned()),
             name: s.name.to_owned(),
             currency: s.currencyunderlying.to_owned(),
             asset: s.asset.to_owned(),
@@ -169,18 +169,13 @@ impl Store<'_> {
             .map(|r: std::result::Result<Stocks, csv::Error>| {
                 r.chain_err(|| "Badly formatted csv.")
             })
-            .map(|r| r.map(|s| (s.name, s)))
+            .map(|r| r.map(|s| (s.name.clone(), s)))
             .collect::<Result<HashMap<String, Stocks>>>()
     }
 
-    fn trades_fold<'a, R, F>(
-        &self,
-        init: &'a mut R,
-        stocks: Option<HashMap<String, Stocks>>,
-        f: F,
-    ) -> Result<&'a mut R>
+    fn trades_fold<R, F>(&self, init: &mut R, f: F) -> Result<()>
     where
-        F: Fn(&'a mut R, Option<HashMap<String, Stocks>>, Trade) -> &'a mut R,
+        F: Fn(&mut R, Trade) -> (),
     {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
@@ -190,7 +185,7 @@ impl Store<'_> {
             .from_path(self.home_dir.join(TRADES_FILE))
             .chain_err(|| "Cannot open trades file")?;
 
-        let raw_record = csv::StringRecord::new();
+        let mut raw_record = csv::StringRecord::new();
         let headers = rdr.headers().chain_err(|| "Can't get headers?")?.clone();
 
         while rdr
@@ -200,43 +195,45 @@ impl Store<'_> {
             let record: Trade = raw_record
                 .deserialize(Some(&headers))
                 .chain_err(|| "Csv not well formed")?;
-            init = f(&mut init, stocks, record);
+            f(init, record);
         }
-        Ok(&mut init)
+        Ok(())
     }
 
-    pub fn trades(&self, name_substring: Option<String>) -> Result<Vec<Trade>> {
-        let trades = self.load_trades()?;
+    pub fn trades(&self, name_substring: Option<String>) -> Result<()> {
         let s = name_substring.unwrap_or_default().to_lowercase();
-        Ok(trades
-            .into_iter()
-            .filter(move |t| t.stock.to_lowercase().contains(&s))
-            .collect())
+        let mut k = ();
+        let f = |_: &mut _, t: Trade| {
+            if t.stock.to_lowercase().contains(&s) {
+                println!("{}", t)
+            }
+        };
+        self.trades_fold(&mut k, f)?;
+        Ok(())
     }
 
     pub fn check(&self) -> Result<(usize, usize)> {
         let stocks = self.load_stocks()?;
-
-        let f = |c: &mut usize, _, t| *c + 1;
-        let mut c = 0;
-        let mut ct = self.trades_fold(c, None, f)?;
-
         let cs = stocks.iter().count();
-        Ok((*ct, cs))
+
+        let f = |c: &mut usize, _: Trade| *c = *c + 1; // if you remove Trade from this line it doesn't work???
+        let mut ct = 0;
+        self.trades_fold(&mut ct, f)?;
+
+        Ok((ct, cs))
     }
 
     pub fn port(&self) -> Result<Vec<PortLine>> {
         let stocks = self.load_stocks()?;
-        let trades = self.load_trades()?;
 
         let mut lines: HashMap<_, _> = stocks
-            .iter()
-            .map(|s| (&s.name, PortLine::from(&s)))
+            .values()
+            .map(|s| (s.name.clone(), PortLine::from(s)))
             .collect();
 
-        trades.into_iter().for_each(|t| {
-            let mut line = lines
-                .get_mut(&t.stock)
+        let f = |llines: &mut HashMap<String, PortLine>, t: Trade| {
+            let mut line = llines
+                .get_mut(t.stock)
                 .expect("Error getting a line I just addedd??");
 
             match t.r#type {
@@ -247,7 +244,10 @@ impl Store<'_> {
                 TradeType::Buy => line.units += t.units,
                 TradeType::Sell => line.units -= t.units,
             }
-        });
+        };
+
+        self.trades_fold(&mut lines, f)?;
+
         Ok(lines
             .into_iter()
             .map(move |(_, v)| v)
