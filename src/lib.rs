@@ -47,15 +47,15 @@ pub struct Trade<'a> {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Stocks<'a> {
-    pub name: &'a str,
-    pub asset: &'a str,
-    pub group: &'a str,
-    pub tags: &'a str,
-    pub riskyness: &'a str,
-    pub ticker: Option<&'a str>,
-    pub tradedcurrency: &'a str,
-    pub currencyunderlying: &'a str,
+pub struct Stocks {
+    pub name: String,
+    pub asset: String,
+    pub group: String,
+    pub tags: String,
+    pub riskyness: String,
+    pub ticker: Option<String>,
+    pub tradedcurrency: String,
+    pub currencyunderlying: String,
 }
 
 #[derive(Debug)]
@@ -156,49 +156,31 @@ impl fmt::Display for PortLine {
 }
 
 impl Store<'_> {
-    pub fn load_trades(&self) -> Result<Vec<Trade>> {
-        self.load_csv(TRADES_FILE)
-    }
-    pub fn load_stocks(&self) -> Result<Vec<Stocks>> {
-        self.load_csv(STOCKS_FILE)
-    }
-
-    fn load_csv<T>(&self, data: &str) -> Result<Vec<T>>
-    where
-        //T: for<'de> Deserialize<'de>,
-        T: serde::de::DeserializeOwned,
-    {
+    pub fn load_stocks(&self) -> Result<HashMap<String, Stocks>> {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .flexible(true)
             .trim(csv::Trim::All)
             .comment(Some(b'#'))
-            .from_reader(data.as_bytes());
+            .from_path(self.home_dir.join(STOCKS_FILE))
+            .chain_err(|| "Cannot open stocks file")?;
 
-        /*
-        let raw_record = csv::StringRecord::new();
-        let headers = rdr.headers().chain_err(|| "Can't get headers?")?.clone();
-
-        let mut res = Vec::with_capacity(1024);
-        while rdr
-            .read_record(&mut raw_record)
-            .chain_err(|| "Csv not well formed")?
-        {
-            let record: T = raw_record
-                .deserialize(Some(&headers))
-                .chain_err(|| "Csv not well formed")?;
-            res.push(record);
-        }
-        Ok(res)
-        */
         rdr.deserialize()
-            .map(|r| r.chain_err(|| "Badly formatted csv."))
-            .collect::<Result<Vec<T>>>()
+            .map(|r: std::result::Result<Stocks, csv::Error>| {
+                r.chain_err(|| "Badly formatted csv.")
+            })
+            .map(|r| r.map(|s| (s.name, s)))
+            .collect::<Result<HashMap<String, Stocks>>>()
     }
 
-    fn trades_fold<'a, R, F>(&self, init: &'a mut R, f: F) -> Result<&'a mut R>
+    fn trades_fold<'a, R, F>(
+        &self,
+        init: &'a mut R,
+        stocks: Option<HashMap<String, Stocks>>,
+        f: F,
+    ) -> Result<&'a mut R>
     where
-        F: Fn(&'a mut R, Trade) -> &'a mut R,
+        F: Fn(&'a mut R, Option<HashMap<String, Stocks>>, Trade) -> &'a mut R,
     {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
@@ -218,7 +200,7 @@ impl Store<'_> {
             let record: Trade = raw_record
                 .deserialize(Some(&headers))
                 .chain_err(|| "Csv not well formed")?;
-            init = f(&mut init, record);
+            init = f(&mut init, stocks, record);
         }
         Ok(&mut init)
     }
@@ -234,11 +216,13 @@ impl Store<'_> {
 
     pub fn check(&self) -> Result<(usize, usize)> {
         let stocks = self.load_stocks()?;
-        let trades = self.load_trades()?;
 
-        let ct = trades.iter().count();
+        let f = |c: &mut usize, _, t| *c + 1;
+        let mut c = 0;
+        let mut ct = self.trades_fold(c, None, f)?;
+
         let cs = stocks.iter().count();
-        Ok((ct, cs))
+        Ok((*ct, cs))
     }
 
     pub fn port(&self) -> Result<Vec<PortLine>> {
