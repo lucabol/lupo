@@ -73,10 +73,16 @@ fn run() -> Result<()> {
             store.trades(name_substring)?;
             Ok(())
         }
+        SubCommand::Stocks { name_substring } => {
+            let store = Store::open(home_dir)?;
+            store.stocks(name_substring)?;
+            Ok(())
+        }
         SubCommand::Port {} => {
             let store = Store::open(home_dir)?;
-            let port_lines = store.port()?;
-            port_lines.iter().for_each(|l| println!("{:}", l));
+            let mut port_lines = store.port()?;
+            port_lines.sort_by(|a, b| a.name.cmp(&b.name));
+            port_lines.iter().for_each(|l| println!("{}", l));
             Ok(())
         }
     }

@@ -124,7 +124,7 @@ impl fmt::Display for Trade<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}{:<10}\t{:<7}\t{:>10.2}\t{:<25}\t{:>8.2}\t{:>8.2}",
+            "{:<10}\t{:<10}\t{:<7}\t{:>10.2}\t{:<25}\t{:>8.2}\t{:>8.2}",
             self.account.unicode_truncate(10).0,
             self.date.format("%Y/%m/%d"),
             self.r#type,
@@ -140,7 +140,7 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<15}\t{:<3}\t{:>10.2}",
+            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10.2}",
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -148,8 +148,8 @@ impl fmt::Display for PortLine {
             self.currency.unicode_truncate(5).0,
             self.asset.unicode_truncate(10).0,
             self.group.unicode_truncate(15).0,
-            self.tags.unicode_truncate(15).0,
-            self.riskyness.unicode_truncate(3).0,
+            self.tags.unicode_truncate(10).0,
+            self.riskyness.unicode_truncate(1).0,
             self.units,
         )
     }
@@ -209,6 +209,19 @@ impl Store<'_> {
             }
         };
         self.trades_fold(&mut k, f)?;
+        Ok(())
+    }
+
+    pub fn stocks(&self, name_substring: Option<String>) -> Result<()> {
+        let s = name_substring.unwrap_or_default().to_lowercase();
+        let stocks = self.load_stocks()?;
+
+        stocks
+            .values()
+            .map(|st| PortLine::from(st))
+            .filter(|st| st.name.to_lowercase().contains(&s))
+            .for_each(|st| println!("{}", st));
+
         Ok(())
     }
 

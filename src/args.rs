@@ -35,6 +35,8 @@ pub enum SubCommand {
     Check {},
     /// List all trades in the portfolio
     Trades { name_substring: Option<String> },
+    /// List all stocks known to the program
+    Stocks { name_substring: Option<String> },
     /// List all portfolio's positions
     Port {},
 }
