@@ -59,28 +59,28 @@ pub struct Stocks<'a> {
 }
 
 #[derive(Debug)]
-pub struct PortLine<'a> {
-    pub ticker: Option<&'a str>,
-    pub name: &'a str,
-    pub currency: &'a str,
-    pub asset: &'a str,
-    pub group: &'a str,
-    pub tags: &'a str,
-    pub riskyness: &'a str,
+pub struct PortLine {
+    pub ticker: Option<String>,
+    pub name: String,
+    pub currency: String,
+    pub asset: String,
+    pub group: String,
+    pub tags: String,
+    pub riskyness: String,
     pub units: f64,
     pub gain: f64,
 }
 
-impl<'a> PortLine<'a> {
-    fn from(s: &'a Stocks) -> PortLine<'a> {
+impl PortLine {
+    fn from(s: Stocks) -> PortLine {
         PortLine {
-            ticker: s.ticker,
-            name: s.name,
-            currency: s.currencyunderlying,
-            asset: s.asset,
-            group: s.group,
-            tags: s.tags,
-            riskyness: s.riskyness,
+            ticker: s.ticker.map(|s| s.to_owned()),
+            name: s.name.to_owned(),
+            currency: s.currencyunderlying.to_owned(),
+            asset: s.asset.to_owned(),
+            group: s.group.to_owned(),
+            tags: s.tags.to_owned(),
+            riskyness: s.riskyness.to_owned(),
             units: 0.0,
             gain: 0.0,
         }
@@ -136,7 +136,7 @@ impl fmt::Display for Trade<'_> {
     }
 }
 
-impl fmt::Display for PortLine<'_> {
+impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -194,6 +194,33 @@ impl Store<'_> {
         rdr.deserialize()
             .map(|r| r.chain_err(|| "Badly formatted csv."))
             .collect::<Result<Vec<T>>>()
+    }
+
+    fn trades_fold<'a, R, F>(&self, init: &'a mut R, f: F) -> Result<&'a mut R>
+    where
+        F: Fn(&'a mut R, Trade) -> &'a mut R,
+    {
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .flexible(true)
+            .trim(csv::Trim::All)
+            .comment(Some(b'#'))
+            .from_path(self.home_dir.join(TRADES_FILE))
+            .chain_err(|| "Cannot open trades file")?;
+
+        let raw_record = csv::StringRecord::new();
+        let headers = rdr.headers().chain_err(|| "Can't get headers?")?.clone();
+
+        while rdr
+            .read_record(&mut raw_record)
+            .chain_err(|| "Csv not well formed")?
+        {
+            let record: Trade = raw_record
+                .deserialize(Some(&headers))
+                .chain_err(|| "Csv not well formed")?;
+            init = f(&mut init, record);
+        }
+        Ok(&mut init)
     }
 
     pub fn trades(&self, name_substring: Option<String>) -> Result<Vec<Trade>> {
