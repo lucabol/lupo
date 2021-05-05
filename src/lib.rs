@@ -140,7 +140,7 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<15}\t{:<3}\t{:>10.2}",
+            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<15}\t{:<3}\t{:>10.2}",
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -238,7 +238,7 @@ impl Store<'_> {
 
             match t.r#type {
                 TradeType::Div => (),
-                TradeType::Split => (),
+                TradeType::Split => line.units = line.units * t.split,
                 TradeType::TrIn => (),
                 TradeType::TrOut => (),
                 TradeType::Buy => line.units += t.units,
@@ -251,7 +251,7 @@ impl Store<'_> {
         Ok(lines
             .into_iter()
             .map(move |(_, v)| v)
-            .filter(|l| l.units > 0.01)
+            .filter(|l| !(l.units < 0.01 && l.units > -0.01))
             .collect::<Vec<PortLine>>())
     }
 
