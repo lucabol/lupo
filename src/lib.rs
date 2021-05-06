@@ -255,11 +255,9 @@ impl Store<'_> {
             .collect();
 
         let f = |llines: &mut HashMap<String, RefCell<PortLine>>, t: Trade| {
-            println!("1:{}", t.stock);
             let mut line = llines.get(t.stock).unwrap().borrow_mut();
 
             let cash = if !t.stock.contains("Cash") {
-                println!("2:{}\t{}", t.stock, t.account);
                 Some(
                     llines
                         .get(&format!("Cash{}", t.account)[..])
@@ -270,28 +268,40 @@ impl Store<'_> {
                 None
             };
 
+            let amt = |t: &Trade| t.units * t.price.unwrap_or_default() * t.currency;
             match t.r#type {
                 TradeType::Div => {
-                    line.divs_usd += t.units * t.price.unwrap_or_default() * t.currency
+                    line.divs_usd += amt(&t);
+                    if let Some(mut c) = cash {
+                        c.units += amt(&t);
+                    }
                 }
                 TradeType::Split => line.units = line.units * t.split,
                 TradeType::TrIn => {
                     line.units += t.units;
-                    line.cost_usd += t.units * t.price.unwrap_or_default() * t.currency
+                    line.revenue_usd += amt(&t);
                 }
                 TradeType::TrOut => {
                     line.units -= t.units;
-                    line.revenue_usd += t.units * t.price.unwrap_or_default() * t.currency
+                    line.cost_usd += amt(&t);
                 }
                 TradeType::Buy => {
                     line.units += t.units;
-                    line.cost_usd += t.units * t.price.unwrap_or_default() * t.currency;
-                    line.fees_usd += t.fees.unwrap_or_default() * t.currency
+                    line.fees_usd += t.fees.unwrap_or_default() * t.currency;
+                    line.cost_usd += amt(&t);
+
+                    if let Some(mut c) = cash {
+                        c.units -= amt(&t);
+                    }
                 }
                 TradeType::Sell => {
                     line.units -= t.units;
-                    line.revenue_usd += t.units * t.price.unwrap_or_default() * t.currency;
-                    line.fees_usd += t.fees.unwrap_or_default() * t.currency
+                    line.fees_usd += t.fees.unwrap_or_default() * t.currency;
+                    line.revenue_usd += amt(&t);
+
+                    if let Some(mut c) = cash {
+                        c.units += amt(&t);
+                    }
                 }
             }
         };
