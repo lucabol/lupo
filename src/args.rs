@@ -47,7 +47,7 @@ pub enum SubCommand {
     Port {
         /// Includes closed positions in the portfolio
         #[clap(short, long)]
-        include_closed_pos: bool,
+        all: bool,
     },
 }
 
