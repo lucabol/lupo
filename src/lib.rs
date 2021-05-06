@@ -5,6 +5,7 @@ use std::{collections::HashMap, fmt, fs, io, path};
 
 use chrono::{DateTime, Utc};
 use log::{info, warn};
+use num_format::{Locale, ToFormattedString};
 use serde::Deserialize;
 use unicode_truncate::UnicodeTruncateStr;
 
@@ -127,15 +128,24 @@ impl fmt::Display for TradeType {
     }
 }
 
+trait Separate {
+    fn sep(&self) -> String;
+}
+
+impl Separate for f64 {
+    fn sep(&self) -> String {
+        (self.round() as i64).to_formatted_string(&Locale::en)
+    }
+}
 impl fmt::Display for Trade<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<10}\t{:<7}\t{:>10.2}\t{:<25}\t{:>8.2}\t{:>8.2}",
+            "{:<10}\t{:<10}\t{:<7}\t{:>10}\t{:<25}\t{:>8.2}\t{:>8.2}",
             self.account.unicode_truncate(10).0,
             self.date.format("%Y/%m/%d"),
             self.r#type,
-            self.units,
+            self.units.sep(),
             self.stock.unicode_truncate(25).0,
             self.price.unwrap_or_default(),
             self.fees.unwrap_or_default()
@@ -147,7 +157,7 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10.2}\t{:>10.2}\t{:>10.2}\t{:>10.2}",
+            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10}\t{:>10}\t{:>10}",
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -157,10 +167,10 @@ impl fmt::Display for PortLine {
             self.group.unicode_truncate(15).0,
             self.tags.unicode_truncate(10).0,
             self.riskyness.unicode_truncate(1).0,
-            self.units,
-            self.revenue_usd,
-            self.cost_usd,
-            self.fees_usd,
+            self.units.sep(),
+            self.revenue_usd.sep(),
+            self.cost_usd.sep(),
+            self.fees_usd.sep(),
         )
     }
 }
@@ -274,6 +284,7 @@ impl Store<'_> {
                     line.divs_usd += amt(&t);
                     if let Some(mut c) = cash {
                         c.units += amt(&t);
+                        c.divs_usd += amt(&t);
                     }
                 }
                 TradeType::Split => line.units = line.units * t.split,
@@ -292,6 +303,8 @@ impl Store<'_> {
 
                     if let Some(mut c) = cash {
                         c.units -= amt(&t);
+                        c.cost_usd += amt(&t);
+                        c.fees_usd += t.fees.unwrap_or_default();
                     }
                 }
                 TradeType::Sell => {
@@ -301,6 +314,8 @@ impl Store<'_> {
 
                     if let Some(mut c) = cash {
                         c.units += amt(&t);
+                        c.revenue_usd += amt(&t);
+                        c.fees_usd += t.fees.unwrap_or_default();
                     }
                 }
             }
