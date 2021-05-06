@@ -34,11 +34,21 @@ pub enum SubCommand {
     /// Check that all portfolio files are well formed
     Check {},
     /// List all trades in the portfolio
-    Trades { name_substring: Option<String> },
+    Trades {
+        /// Includes just trades with name containing the string
+        name_substring: Option<String>,
+    },
     /// List all stocks known to the program
-    Stocks { name_substring: Option<String> },
+    Stocks {
+        /// Includes just stocks with name containing the string
+        name_substring: Option<String>,
+    },
     /// List all portfolio's positions
-    Port {},
+    Port {
+        /// Includes closed positions in the portfolio
+        #[clap(short, long)]
+        include_closed_pos: bool,
+    },
 }
 
 pub fn parse_args() -> Opts {

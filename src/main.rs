@@ -78,9 +78,10 @@ fn run() -> Result<()> {
             store.stocks(name_substring)?;
             Ok(())
         }
-        SubCommand::Port {} => {
+        SubCommand::Port { include_closed_pos } => {
             let store = Store::open(home_dir)?;
-            let mut port_lines = store.port()?;
+            let mut port_lines = store.port(include_closed_pos)?;
+
             port_lines.sort_by(|a, b| a.name.cmp(&b.name));
             port_lines.iter().for_each(|l| println!("{}", l));
             Ok(())

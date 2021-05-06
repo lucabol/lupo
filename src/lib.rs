@@ -1,4 +1,5 @@
 #![recursion_limit = "1024"]
+use std::cell::RefCell;
 use std::io::Write;
 use std::{collections::HashMap, fmt, fs, io, path};
 
@@ -68,7 +69,10 @@ pub struct PortLine {
     pub tags: String,
     pub riskyness: String,
     pub units: f64,
-    pub gain: f64,
+    pub cost_usd: f64,
+    pub revenue_usd: f64,
+    pub divs_usd: f64,
+    pub fees_usd: f64,
 }
 
 impl PortLine {
@@ -82,7 +86,10 @@ impl PortLine {
             tags: s.tags.to_owned(),
             riskyness: s.riskyness.to_owned(),
             units: 0.0,
-            gain: 0.0,
+            cost_usd: 0.0,
+            revenue_usd: 0.0,
+            divs_usd: 0.0,
+            fees_usd: 0.0,
         }
     }
 }
@@ -140,7 +147,7 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10.2}",
+            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10.2}\t{:>10.2}\t{:>10.2}\t{:>10.2}",
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -151,6 +158,9 @@ impl fmt::Display for PortLine {
             self.tags.unicode_truncate(10).0,
             self.riskyness.unicode_truncate(1).0,
             self.units,
+            self.revenue_usd,
+            self.cost_usd,
+            self.fees_usd,
         )
     }
 }
@@ -236,36 +246,66 @@ impl Store<'_> {
         Ok((ct, cs))
     }
 
-    pub fn port(&self) -> Result<Vec<PortLine>> {
+    pub fn port(&self, all: bool) -> Result<Vec<PortLine>> {
         let stocks = self.load_stocks()?;
 
         let mut lines: HashMap<_, _> = stocks
             .values()
-            .map(|s| (s.name.clone(), PortLine::from(s)))
+            .map(|s| (s.name.clone(), RefCell::new(PortLine::from(s))))
             .collect();
 
-        let f = |llines: &mut HashMap<String, PortLine>, t: Trade| {
-            let mut line = llines
-                .get_mut(t.stock)
-                .expect("Error getting a line I just addedd??");
+        let f = |llines: &mut HashMap<String, RefCell<PortLine>>, t: Trade| {
+            println!("1:{}", t.stock);
+            let mut line = llines.get(t.stock).unwrap().borrow_mut();
+
+            let cash = if !t.stock.contains("Cash") {
+                println!("2:{}\t{}", t.stock, t.account);
+                Some(
+                    llines
+                        .get(&format!("Cash{}", t.account)[..])
+                        .unwrap()
+                        .borrow_mut(),
+                )
+            } else {
+                None
+            };
 
             match t.r#type {
-                TradeType::Div => (),
+                TradeType::Div => {
+                    line.divs_usd += t.units * t.price.unwrap_or_default() * t.currency
+                }
                 TradeType::Split => line.units = line.units * t.split,
-                TradeType::TrIn => (),
-                TradeType::TrOut => (),
-                TradeType::Buy => line.units += t.units,
-                TradeType::Sell => line.units -= t.units,
+                TradeType::TrIn => {
+                    line.units += t.units;
+                    line.cost_usd += t.units * t.price.unwrap_or_default() * t.currency
+                }
+                TradeType::TrOut => {
+                    line.units -= t.units;
+                    line.revenue_usd += t.units * t.price.unwrap_or_default() * t.currency
+                }
+                TradeType::Buy => {
+                    line.units += t.units;
+                    line.cost_usd += t.units * t.price.unwrap_or_default() * t.currency;
+                    line.fees_usd += t.fees.unwrap_or_default() * t.currency
+                }
+                TradeType::Sell => {
+                    line.units -= t.units;
+                    line.revenue_usd += t.units * t.price.unwrap_or_default() * t.currency;
+                    line.fees_usd += t.fees.unwrap_or_default() * t.currency
+                }
             }
         };
 
         self.trades_fold(&mut lines, f)?;
 
-        Ok(lines
-            .into_iter()
-            .map(move |(_, v)| v)
-            .filter(|l| !(l.units < 0.01 && l.units > -0.01))
-            .collect::<Vec<PortLine>>())
+        let ll = lines.into_iter().map(move |(_, v)| v.into_inner());
+        if !all {
+            Ok(ll
+                .filter(|l| !(l.units < 0.01 && l.units > -0.01))
+                .collect::<Vec<PortLine>>())
+        } else {
+            Ok(ll.collect::<Vec<PortLine>>())
+        }
     }
 
     fn create_file_if_not_exist(&self, file_name: &str, header: &str) -> crate::errors::Result<()> {
