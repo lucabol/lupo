@@ -6,7 +6,7 @@ use std::{collections::HashMap, fmt, fs, io, path};
 use chrono::{DateTime, Utc};
 use log::{info, warn};
 use num_format::{Locale, ToFormattedString};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use unicode_truncate::UnicodeTruncateStr;
 use yahoo_finance::{history, Interval, Timestamped};
 
@@ -18,9 +18,18 @@ pub mod errors {
 
 pub const TRADES_FILE: &str = "trades.tsv";
 pub const STOCKS_FILE: &str = "stocks.tsv";
+pub const PRICES_FILE: &str = "prices.tsv";
 
 pub struct Store<'a> {
     pub home_dir: &'a path::Path,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PriceLine {
+    pub ticker: String,
+    pub price: f64,
+    #[serde(with = "my_date_format")]
+    pub date: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,9 +107,10 @@ impl PortLine {
 
 mod my_date_format {
     use chrono::{DateTime, TimeZone, Utc};
-    use serde::{self, Deserialize, Deserializer};
+    use serde::{self, Deserialize, Deserializer, Serializer};
 
-    const FORMAT: &'static str = "%Y/%m/%d %H:%M:%S";
+    const FORMAT_IN: &'static str = "%Y/%m/%d %H:%M:%S";
+    const FORMAT_OUT: &'static str = "%Y/%m/%d";
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
     where
@@ -108,8 +118,15 @@ mod my_date_format {
     {
         let s = String::deserialize(deserializer)?;
         let ks = s + " 00:00:00";
-        Utc.datetime_from_str(&ks, FORMAT)
+        Utc.datetime_from_str(&ks, FORMAT_IN)
             .map_err(serde::de::Error::custom)
+    }
+    pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}", date.format(FORMAT_OUT));
+        serializer.serialize_str(&s)
     }
 }
 impl fmt::Display for TradeType {
@@ -154,6 +171,18 @@ impl fmt::Display for Trade<'_> {
     }
 }
 
+impl fmt::Display for PriceLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:10}\t{:>10.2}\t{}",
+            self.ticker,
+            self.price,
+            self.date.format("%d/%m/%Y")
+        )
+    }
+}
+
 impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -192,6 +221,20 @@ impl Store<'_> {
             })
             .map(|r| r.map(|s| (s.name.clone(), s)))
             .collect::<Result<HashMap<String, Stocks>>>()
+    }
+
+    pub fn write_prices(&self, lines: Vec<PriceLine>) -> Result<()> {
+        let mut wtr = csv::WriterBuilder::new()
+            .delimiter(b'\t')
+            .quote_style(csv::QuoteStyle::NonNumeric)
+            .from_path(self.home_dir.join(PRICES_FILE))
+            .chain_err(|| "Can't open price file")?;
+
+        for pl in &lines {
+            wtr.serialize(pl)
+                .chain_err(|| "Error serializing one price")?;
+        }
+        wtr.flush().chain_err(|| "Error flushing the stocks file")
     }
 
     fn trades_fold<R, F>(&self, init: &mut R, f: F) -> Result<()>
@@ -390,35 +433,50 @@ impl Store<'_> {
 
     pub async fn update_prices(&self) -> Result<()> {
         let mut tasks = Vec::new();
-        let tickers = vec!["AAPL", "KO"];
+        let port = self.port(false)?;
+        let tickers = port.iter().map(|l| l.ticker.clone());
 
         for ticker in tickers {
-            let task = async move {
-                let bars = history::retrieve_interval(ticker, Interval::_5d)
-                    .await
-                    .chain_err(|| format!("Error retrieving prices for {}", ticker));
-                let close = bars.map(|v| v.last().map(|b| (b.datetime(), b.close)));
-                let c = match close {
-                    Ok(Some(x)) => Ok(x),
-                    Ok(None) => Err(Error::from(format!("Empty prices returned for {}", ticker))),
-                    Err(e) => Err(e),
-                };
-                (ticker, c)
+            match ticker {
+                Some(ticker) => {
+                    let task = async move {
+                        let bars = history::retrieve_interval(&ticker[..], Interval::_5d)
+                            .await
+                            .chain_err(|| format!("Error retrieving prices for {}", ticker));
+                        let close = bars.map(|v| v.last().map(|b| (b.datetime(), b.close)));
+                        let c = match close {
+                            Ok(Some(x)) => Ok(x),
+                            Ok(None) => {
+                                Err(Error::from(format!("Empty prices returned for {}", ticker)))
+                            }
+                            Err(e) => Err(e),
+                        };
+                        (ticker, c)
+                    };
+
+                    tasks.push(task);
+                }
+                None => (),
             };
-            tasks.push(task);
         }
 
         let results = futures::future::join_all(tasks).await;
 
+        let mut lines = Vec::new();
         for res in results {
-            let bar = res.1.unwrap();
-            println!(
-                "On {} {} closed at ${:.2}",
-                bar.0.format("%b %e %Y"),
-                res.0,
-                bar.1
-            )
+            match res.1 {
+                Ok(bar) => {
+                    let price_line = PriceLine {
+                        ticker: res.0,
+                        date: bar.0,
+                        price: bar.1,
+                    };
+                    println!("{}", price_line);
+                    lines.push(price_line);
+                }
+                Err(e) => println!("{}", e),
+            }
         }
-        Ok(())
+        self.write_prices(lines)
     }
 }
