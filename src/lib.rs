@@ -8,6 +8,7 @@ use log::{info, warn};
 use num_format::{Locale, ToFormattedString};
 use serde::Deserialize;
 use unicode_truncate::UnicodeTruncateStr;
+use yahoo_finance::{history, Interval, Timestamped};
 
 use crate::errors::*;
 
@@ -385,5 +386,39 @@ impl Store<'_> {
         store.create_file_if_not_exist(TRADES_FILE, trade_header)?;
 
         Ok(store)
+    }
+
+    pub async fn update_prices(&self) -> Result<()> {
+        let mut tasks = Vec::new();
+        let tickers = vec!["AAPL", "KO"];
+
+        for ticker in tickers {
+            let task = async move {
+                let bars = history::retrieve_interval(ticker, Interval::_5d)
+                    .await
+                    .chain_err(|| format!("Error retrieving prices for {}", ticker));
+                let close = bars.map(|v| v.last().map(|b| (b.datetime(), b.close)));
+                let c = match close {
+                    Ok(Some(x)) => Ok(x),
+                    Ok(None) => Err(Error::from(format!("Empty prices returned for {}", ticker))),
+                    Err(e) => Err(e),
+                };
+                (ticker, c)
+            };
+            tasks.push(task);
+        }
+
+        let results = futures::future::join_all(tasks).await;
+
+        for res in results {
+            let bar = res.1.unwrap();
+            println!(
+                "On {} {} closed at ${:.2}",
+                bar.0.format("%b %e %Y"),
+                res.0,
+                bar.1
+            )
+        }
+        Ok(())
     }
 }

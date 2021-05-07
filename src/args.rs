@@ -49,6 +49,8 @@ pub enum SubCommand {
         #[clap(short, long)]
         all: bool,
     },
+    /// Update prices of all stock owned using the Yahoo finance API
+    UpdatePrices {},
 }
 
 pub fn parse_args() -> Opts {

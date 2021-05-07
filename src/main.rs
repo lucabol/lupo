@@ -20,10 +20,11 @@ fn reset_signal_pipe_handler() -> Result<()> {
 
     Ok(())
 }
-fn main() {
+#[tokio::main]
+async fn main() {
     reset_signal_pipe_handler().unwrap();
 
-    if let Err(ref e) = run() {
+    if let Err(ref e) = run().await {
         let mut s = e.to_string();
 
         for e in e.iter().skip(1) {
@@ -41,7 +42,7 @@ fn main() {
     }
 }
 
-fn run() -> Result<()> {
+async fn run() -> Result<()> {
     let opts = parse_args();
 
     stderrlog::new()
@@ -85,6 +86,10 @@ fn run() -> Result<()> {
             port_lines.sort_by(|a, b| a.name.cmp(&b.name));
             port_lines.iter().for_each(|l| println!("{}", l));
             Ok(())
+        }
+        SubCommand::UpdatePrices {} => {
+            let store = Store::open(home_dir)?;
+            store.update_prices().await
         }
     }
 }
