@@ -81,10 +81,7 @@ async fn run() -> Result<()> {
         }
         SubCommand::Port { all } => {
             let store = Store::open(home_dir)?;
-            let mut port_lines = store.port(all)?;
-
-            port_lines.sort_by(|a, b| a.name.cmp(&b.name));
-            port_lines.iter().for_each(|l| println!("{}", l));
+            store.port(all)?;
             Ok(())
         }
         SubCommand::UpdatePrices {} => {

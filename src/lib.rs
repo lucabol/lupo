@@ -196,8 +196,7 @@ impl fmt::Display for PortLine {
         write!(
             f,
             "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t\
-            {:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:<2}\t\
-            {:>10}\t{:>10}\t{:>10}\t{:>10}\t{:>10}",
+            {:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:<2}", // \t\ {:>10}\t{:>10}\t{:>10}\t{:>10}\t{:>10}
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -209,12 +208,14 @@ impl fmt::Display for PortLine {
             self.riskyness.unicode_truncate(1).0,
             self.units.sep(),
             self.price,
-            self.error,
             self.amount_usd.sep(),
+            self.error,
+            /*
             self.amount_perc.sep(),
             self.revenue_usd.sep(),
             self.cost_usd.sep(),
             self.fees_usd.sep(),
+            */
         )
     }
 }
@@ -330,7 +331,7 @@ impl Store<'_> {
         Ok((ct, cs))
     }
 
-    pub fn port(&self, all: bool) -> Result<Vec<PortLine>> {
+    pub fn port(&self, all: bool) -> Result<()> {
         let stocks = self.load_stocks()?;
 
         let mut lines: HashMap<_, _> = stocks
@@ -432,7 +433,15 @@ impl Store<'_> {
                 v.push(l.clone());
             }
         }
-        Ok(v)
+
+        v.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut value = 0.0;
+        v.iter().for_each(|l| {
+            println!("{}", l);
+            value += l.amount_usd;
+        });
+        println!("\nTOTAL : {} USD", value.sep());
+        Ok(())
     }
     fn is_current_stock(units: f64) -> bool {
         units > 0.01 || units < -0.01
