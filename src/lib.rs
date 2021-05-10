@@ -70,7 +70,7 @@ pub struct Stocks {
     pub currencyunderlying: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PortLine {
     pub ticker: Option<String>,
     pub name: String,
@@ -80,6 +80,10 @@ pub struct PortLine {
     pub tags: String,
     pub riskyness: String,
     pub units: f64,
+    pub price: f64,
+    pub error: String,
+    pub amount_usd: f64,
+    pub amount_perc: f64,
     pub cost_usd: f64,
     pub revenue_usd: f64,
     pub divs_usd: f64,
@@ -101,6 +105,10 @@ impl PortLine {
             revenue_usd: 0.0,
             divs_usd: 0.0,
             fees_usd: 0.0,
+            price: 0.0,
+            error: "".to_owned(),
+            amount_usd: 0.0,
+            amount_perc: 0.0,
         }
     }
 }
@@ -187,7 +195,9 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10}\t{:>10}\t{:>10}",
+            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t\
+            {:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:<2}\t\
+            {:>10}\t{:>10}\t{:>10}\t{:>10}\t{:>10}",
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -198,6 +208,10 @@ impl fmt::Display for PortLine {
             self.tags.unicode_truncate(10).0,
             self.riskyness.unicode_truncate(1).0,
             self.units.sep(),
+            self.price,
+            self.error,
+            self.amount_usd.sep(),
+            self.amount_perc.sep(),
             self.revenue_usd.sep(),
             self.cost_usd.sep(),
             self.fees_usd.sep(),
@@ -223,6 +237,22 @@ impl Store<'_> {
             .collect::<Result<HashMap<String, Stocks>>>()
     }
 
+    pub fn load_prices(&self) -> Result<HashMap<String, PriceLine>> {
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .flexible(true)
+            .trim(csv::Trim::All)
+            .comment(Some(b'#'))
+            .from_path(self.home_dir.join(PRICES_FILE))
+            .chain_err(|| "Cannot open prices file")?;
+
+        rdr.deserialize()
+            .map(|r: std::result::Result<PriceLine, csv::Error>| {
+                r.chain_err(|| "Badly formatted csv.")
+            })
+            .map(|r| r.map(|s| (s.ticker.clone(), s)))
+            .collect::<Result<HashMap<String, PriceLine>>>()
+    }
     pub fn write_prices(&self, lines: Vec<PriceLine>) -> Result<()> {
         let mut wtr = csv::WriterBuilder::new()
             .delimiter(b'\t')
@@ -367,14 +397,42 @@ impl Store<'_> {
 
         self.trades_fold(&mut lines, f)?;
 
-        let ll = lines.into_iter().map(move |(_, v)| v.into_inner());
-        if !all {
-            Ok(ll
-                .filter(|l| !(l.units < 0.01 && l.units > -0.01))
-                .collect::<Vec<PortLine>>())
-        } else {
-            Ok(ll.collect::<Vec<PortLine>>())
+        let mut ll = lines.into_iter().map(move |(_, v)| v.into_inner());
+        let mut v = Vec::new();
+
+        let prices = self.load_prices()?;
+        let utc_now = Utc::now();
+        for mut l in &mut ll {
+            if let Some(ref pr) = l.ticker {
+                if let Some(p) = prices.get(&pr[..]) {
+                    l.price = p.price;
+                    if utc_now - p.date > chrono::Duration::days(5) {
+                        l.error += "PO";
+                    }
+                }
+            }
+            if l.asset == "Cash" {
+                l.price = 1.0;
+            }
+            let cur_ticker = format!("{}USD=X", l.currency);
+            let cur_rate = prices.get(&cur_ticker);
+            match cur_rate {
+                Some(r) => {
+                    l.amount_usd = l.price * l.units * r.price;
+                    if utc_now - r.date > chrono::Duration::days(5) {
+                        l.error += "CO";
+                    }
+                }
+                None => {
+                    l.amount_usd = l.price * l.units;
+                    l.error += "CN";
+                }
+            }
+            if all || (l.units > 0.01 || l.units < -0.01) {
+                v.push(l.clone());
+            }
         }
+        Ok(v)
     }
 
     fn create_file_if_not_exist(&self, file_name: &str, header: &str) -> crate::errors::Result<()> {
@@ -434,7 +492,10 @@ impl Store<'_> {
     pub async fn update_prices(&self) -> Result<()> {
         let mut tasks = Vec::new();
         let port = self.port(false)?;
-        let tickers = port.iter().map(|l| l.ticker.clone());
+        let tickers_port = port.iter().map(|l| l.ticker.clone());
+
+        let currencies = vec!["EURUSD=X", "GBPUSD=X", "CADUSD=X", "SGDUSD=X"];
+        let tickers = tickers_port.chain(currencies.iter().map(|t| Some(t.to_string())));
 
         for ticker in tickers {
             match ticker {
@@ -463,6 +524,13 @@ impl Store<'_> {
         let results = futures::future::join_all(tasks).await;
 
         let mut lines = Vec::new();
+
+        lines.push(PriceLine {
+            date: Utc::now(),
+            price: 1.0,
+            ticker: "USDUSD=X".to_string(),
+        });
+
         for res in results {
             match res.1 {
                 Ok(bar) => {
@@ -477,6 +545,7 @@ impl Store<'_> {
                 Err(e) => println!("{}", e),
             }
         }
+
         self.write_prices(lines)
     }
 }
