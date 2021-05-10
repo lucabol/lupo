@@ -244,7 +244,7 @@ impl Store<'_> {
             .trim(csv::Trim::All)
             .comment(Some(b'#'))
             .from_path(self.home_dir.join(PRICES_FILE))
-            .chain_err(|| "Cannot open prices file")?;
+            .chain_err(|| "Cannot open prices file.\n Have you run 'lupo update-prices'?")?;
 
         rdr.deserialize()
             .map(|r: std::result::Result<PriceLine, csv::Error>| {
@@ -428,11 +428,14 @@ impl Store<'_> {
                     l.error += "CN";
                 }
             }
-            if all || (l.units > 0.01 || l.units < -0.01) {
+            if all || Store::is_current_stock(l.units) {
                 v.push(l.clone());
             }
         }
         Ok(v)
+    }
+    fn is_current_stock(units: f64) -> bool {
+        units > 0.01 || units < -0.01
     }
 
     fn create_file_if_not_exist(&self, file_name: &str, header: &str) -> crate::errors::Result<()> {
@@ -491,8 +494,8 @@ impl Store<'_> {
 
     pub async fn update_prices(&self) -> Result<()> {
         let mut tasks = Vec::new();
-        let port = self.port(false)?;
-        let tickers_port = port.iter().map(|l| l.ticker.clone());
+        let stocks = self.load_stocks()?;
+        let tickers_port = stocks.values().map(|l| l.ticker.clone());
 
         let currencies = vec!["EURUSD=X", "GBPUSD=X", "CADUSD=X", "SGDUSD=X"];
         let tickers = tickers_port.chain(currencies.iter().map(|t| Some(t.to_string())));
