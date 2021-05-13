@@ -4,6 +4,7 @@ use lupo::errors::*;
 use lupo::*;
 
 use lupo::args::*;
+use itertools::Itertools;
 
 // Rust doesn't trap a unix signal appropriately occasionally: https://github.com/rust-lang/rust/issues/46016
 fn reset_signal_pipe_handler() -> Result<()> {
@@ -87,7 +88,8 @@ async fn run() -> Result<()> {
         }
         SubCommand::Report { report_type } => {
             let store = Store::open(home_dir)?;
-            store.report(report_type)?;
+            let rll = store.report(report_type)?.sorted_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
+            rll.for_each(|rl| println!("{}", rl));
             Ok(())
         }
         SubCommand::UpdatePrices {} => {

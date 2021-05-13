@@ -4,12 +4,12 @@ use std::io::Write;
 use std::{collections::HashMap, fmt, fs, io, path};
 
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use log::{info, warn};
 use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
 use unicode_truncate::UnicodeTruncateStr;
 use yahoo_finance::{history, Interval, Timestamped};
-use itertools::Itertools;
 
 use crate::errors::*;
 
@@ -91,6 +91,23 @@ pub struct PortLine {
     pub revenue_usd: f64,
     pub divs_usd: f64,
     pub fees_usd: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReportLine {
+    pub group: String,
+    pub amount_usd: f64,
+    pub amount_perc: f64,
+}
+
+impl fmt::Display for ReportLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:<15}\t{:>10}\t{:>5.2}",
+            self.group.unicode_truncate(15).0, self.amount_usd.sep(), (self.amount_perc * 100.0)
+        )
+    }
 }
 
 impl PortLine {
@@ -329,12 +346,24 @@ impl Store<'_> {
         Ok((ct, cs))
     }
 
-    pub fn report(&self, report_type: args::ReportType) -> Result<()> {
+    pub fn report(&self, report_type: args::ReportType) -> Result<impl Iterator<Item=ReportLine> + '_> {
         let port = self.port(false)?;
-        let f = |l:PortLine| l.asset;
-        let groups = port.iter().map(|l| (f((*l).clone()), l)).into_group_map();
-        Ok(())
+        let f = match report_type {
+            args::ReportType::Asset => |l: PortLine| l.asset,
+            args::ReportType::Currency => |l: PortLine| l.currency,
+            args::ReportType::Group => |l: PortLine| l.group,
+            args::ReportType::Riskyness => |l: PortLine| l.riskyness,
+            args::ReportType::Tags => |l: PortLine| l.tags,
+        };
+        let groups = port.iter().map(|l| (f((*l).clone()), l.clone())).into_group_map();
+        let rll = groups.into_iter().map(|(k,v)| ReportLine {
+            group: k.clone(),
+            amount_usd: v.iter().fold(0.0, |sum, l| sum + l.amount_usd),
+            amount_perc: v.iter().fold(0.0,|sum, l| sum + l.amount_perc),
+        });
+        Ok(rll)
     }
+
     pub fn port(&self, all: bool) -> Result<Vec<PortLine>> {
         let stocks = self.load_stocks()?;
 
