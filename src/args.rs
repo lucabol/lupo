@@ -57,14 +57,21 @@ pub enum SubCommand {
     },
     /// Update prices of all stock owned using the Yahoo finance API
     UpdatePrices {},
+    /// Total value of the portfolio
+    Total {},
 }
 
 #[derive(Clap)]
 pub enum ReportType {
+    /// By currency
     Currency,
+    /// By asset type
     Asset,
+    /// By group
     Group,
+    /// By level of risk
     Riskyness,
+    /// By tags (user defined)
     Tags,
 }
 

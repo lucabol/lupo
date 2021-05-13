@@ -92,6 +92,12 @@ async fn run() -> Result<()> {
             rll.for_each(|rl| println!("{}", rl));
             Ok(())
         }
+        SubCommand::Total {} => {
+            let store = Store::open(home_dir)?;
+            let tot = store.total()?;
+            println!("USD\t{:<10}", tot.sep());
+            Ok(())
+        }
         SubCommand::UpdatePrices {} => {
             let store = Store::open(home_dir)?;
             store.update_prices().await

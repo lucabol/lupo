@@ -174,7 +174,7 @@ impl fmt::Display for TradeType {
     }
 }
 
-trait Separate {
+pub trait Separate {
     fn sep(&self) -> String;
 }
 
@@ -362,6 +362,11 @@ impl Store<'_> {
             amount_perc: v.iter().fold(0.0,|sum, l| sum + l.amount_perc),
         });
         Ok(rll)
+    }
+
+    pub fn total(&self) -> Result<f64> {
+        let port = self.port(false)?;
+        Ok(port.iter().fold(0.0, |sum, pl| sum + pl.amount_usd))
     }
 
     pub fn port(&self, all: bool) -> Result<Vec<PortLine>> {
