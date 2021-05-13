@@ -1,10 +1,9 @@
 use log::error;
 
-mod args;
-use args::*;
-
 use lupo::errors::*;
 use lupo::*;
+
+use lupo::args::*;
 
 // Rust doesn't trap a unix signal appropriately occasionally: https://github.com/rust-lang/rust/issues/46016
 fn reset_signal_pipe_handler() -> Result<()> {
@@ -81,7 +80,14 @@ async fn run() -> Result<()> {
         }
         SubCommand::Port { all } => {
             let store = Store::open(home_dir)?;
-            store.port(all)?;
+            let mut v = store.port(all)?;
+            v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
+            v.iter().for_each(|l| println!("{}", l));
+            Ok(())
+        }
+        SubCommand::Report { report_type } => {
+            let store = Store::open(home_dir)?;
+            store.report(report_type)?;
             Ok(())
         }
         SubCommand::UpdatePrices {} => {

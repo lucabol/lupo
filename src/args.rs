@@ -49,8 +49,23 @@ pub enum SubCommand {
         #[clap(short, long)]
         all: bool,
     },
+    /// Report on the portfolio exposure to various risks
+    Report {
+        /// Type of report to generate
+        #[clap(subcommand)]
+        report_type: ReportType,
+    },
     /// Update prices of all stock owned using the Yahoo finance API
     UpdatePrices {},
+}
+
+#[derive(Clap)]
+pub enum ReportType {
+    Currency,
+    Asset,
+    Group,
+    Riskyness,
+    Tags,
 }
 
 pub fn parse_args() -> Opts {

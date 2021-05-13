@@ -9,8 +9,11 @@ use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
 use unicode_truncate::UnicodeTruncateStr;
 use yahoo_finance::{history, Interval, Timestamped};
+use itertools::Itertools;
 
 use crate::errors::*;
+
+pub mod args;
 
 pub mod errors {
     error_chain::error_chain! {}
@@ -195,8 +198,9 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t\
-            {:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:<2}", // \t\ {:>10}\t{:>10}\t{:>10}\t{:>10}\t{:>10}
+            "{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t\
+            {:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:<2}",
+            (self.amount_perc * 100.0),
             self.ticker
                 .as_ref()
                 .map_or("<NA>", |t| t.unicode_truncate(10).0),
@@ -210,12 +214,6 @@ impl fmt::Display for PortLine {
             self.price,
             self.amount_usd.sep(),
             self.error,
-            /*
-            self.amount_perc.sep(),
-            self.revenue_usd.sep(),
-            self.cost_usd.sep(),
-            self.fees_usd.sep(),
-            */
         )
     }
 }
@@ -331,7 +329,13 @@ impl Store<'_> {
         Ok((ct, cs))
     }
 
-    pub fn port(&self, all: bool) -> Result<()> {
+    pub fn report(&self, report_type: args::ReportType) -> Result<()> {
+        let port = self.port(false)?;
+        let f = |l:PortLine| l.asset;
+        let groups = port.iter().map(|l| (f((*l).clone()), l)).into_group_map();
+        Ok(())
+    }
+    pub fn port(&self, all: bool) -> Result<Vec<PortLine>> {
         let stocks = self.load_stocks()?;
 
         let mut lines: HashMap<_, _> = stocks
@@ -434,14 +438,12 @@ impl Store<'_> {
             }
         }
 
-        v.sort_by(|a, b| a.name.cmp(&b.name));
-        let mut value = 0.0;
-        v.iter().for_each(|l| {
-            println!("{}", l);
-            value += l.amount_usd;
+        let total = v.iter().fold(0.0, |sum, l| sum + l.amount_usd);
+        v.iter_mut().for_each(|mut l| {
+            l.amount_perc = l.amount_usd / total;
         });
-        println!("\nTOTAL : {} USD", value.sep());
-        Ok(())
+
+        Ok(v)
     }
     fn is_current_stock(units: f64) -> bool {
         units > 0.01 || units < -0.01
