@@ -100,16 +100,24 @@ pub struct ReportLine {
     pub amount_perc: f64,
 }
 
+#[macro_export]
+macro_rules! fmt_report { () => { "{:<15}\t{:>10}\t{:>5.2}" };
+}
+
 impl fmt::Display for ReportLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<15}\t{:>10}\t{:>5.2}",
+            fmt_report!(),
             self.group.unicode_truncate(15).0, self.amount_usd.sep(), (self.amount_perc * 100.0)
         )
     }
 }
 
+#[macro_export]
+macro_rules! fmt_portline { () => 
+    {"{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:<2}"};
+}
 impl PortLine {
     fn from(s: &Stocks) -> PortLine {
         PortLine {
@@ -183,11 +191,17 @@ impl Separate for f64 {
         (self.round() as i64).to_formatted_string(&Locale::en)
     }
 }
+
+#[macro_export]
+macro_rules! fmt_trade { () => 
+    {"{:<10}\t{:<10}\t{:<7}\t{:>10}\t{:<25}\t{:>8.2}\t{:>8.2}"};
+}
+
 impl fmt::Display for Trade<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:<10}\t{:<10}\t{:<7}\t{:>10}\t{:<25}\t{:>8.2}\t{:>8.2}",
+            fmt_trade!(),
             self.account.unicode_truncate(10).0,
             self.date.format("%Y/%m/%d"),
             self.r#type,
@@ -215,8 +229,7 @@ impl fmt::Display for PortLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t\
-            {:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:<2}",
+            fmt_portline!(),
             (self.amount_perc * 100.0),
             self.ticker
                 .as_ref()

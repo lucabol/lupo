@@ -71,6 +71,8 @@ async fn run() -> Result<()> {
         }
         SubCommand::Trades { name_substring } => {
             let store = Store::open(home_dir)?;
+            println!(fmt_trade!(),"ACCOUNT", "DATE", "TYPE",
+                "UNITS", "NAME", "PRICE", "FEES");
             store.trades(name_substring)?;
             Ok(())
         }
@@ -83,12 +85,15 @@ async fn run() -> Result<()> {
             let store = Store::open(home_dir)?;
             let mut v = store.port(all)?;
             v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
+            println!(fmt_portline!(),"%", "TICKER", "NAME", "CUR", "ASSET",
+                "GROUP", "TAGS", "R", "UNITS", "PRICE", "AMOUNT", "ER");
             v.iter().for_each(|l| println!("{}", l));
             Ok(())
         }
         SubCommand::Report { report_type } => {
             let store = Store::open(home_dir)?;
             let rll = store.report(report_type)?.sorted_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
+            println!(fmt_report!(), "GROUP", "AMOUNT", "% TOT");
             rll.for_each(|rl| println!("{}", rl));
             Ok(())
         }
