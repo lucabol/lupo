@@ -3,8 +3,8 @@ use log::error;
 use lupo::errors::*;
 use lupo::*;
 
-use lupo::args::*;
 use itertools::Itertools;
+use lupo::args::*;
 
 // Rust doesn't trap a unix signal appropriately occasionally: https://github.com/rust-lang/rust/issues/46016
 fn reset_signal_pipe_handler() -> Result<()> {
@@ -71,8 +71,10 @@ async fn run() -> Result<()> {
         }
         SubCommand::Trades { name_substring } => {
             let store = Store::open(home_dir)?;
-            println!(fmt_trade!(),"ACCOUNT", "DATE", "TYPE",
-                "UNITS", "NAME", "PRICE", "FEES");
+            println!(
+                fmt_trade!(),
+                "ACCOUNT", "DATE", "TYPE", "UNITS", "NAME", "PRICE", "FEES"
+            );
             store.trades(name_substring)?;
             Ok(())
         }
@@ -81,18 +83,35 @@ async fn run() -> Result<()> {
             store.stocks(name_substring)?;
             Ok(())
         }
-        SubCommand::Port { all } => {
+        SubCommand::Port { all, separate_cash } => {
             let store = Store::open(home_dir)?;
-            let mut v = store.port(all)?;
+            let mut v = store.port(all, separate_cash)?;
             v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
-            println!(fmt_portline!(),"%", "TICKER", "NAME", "CUR", "ASSET",
-                "GROUP", "TAGS", "R", "UNITS", "PRICE", "AMOUNT", "ER");
+            println!(
+                fmt_portline!(),
+                "%",
+                "TICKER",
+                "NAME",
+                "CUR",
+                "ASSET",
+                "GROUP",
+                "TAGS",
+                "R",
+                "UNITS",
+                "PRICE",
+                "AMOUNT",
+                "GAIN",
+                "TAX",
+                "ER"
+            );
             v.iter().for_each(|l| println!("{}", l));
             Ok(())
         }
         SubCommand::Report { report_type } => {
             let store = Store::open(home_dir)?;
-            let rll = store.report(report_type)?.sorted_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
+            let rll = store
+                .report(report_type)?
+                .sorted_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
             println!(fmt_report!(), "GROUP", "AMOUNT", "% TOT");
             rll.for_each(|rl| println!("{}", rl));
             Ok(())

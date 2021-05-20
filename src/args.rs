@@ -48,6 +48,10 @@ pub enum SubCommand {
         /// Includes closed positions in the portfolio
         #[clap(short, long)]
         all: bool,
+
+        /// Separate cash positions by account
+        #[clap(short, long)]
+        separate_cash: bool,
     },
     /// Report on the portfolio exposure to various risks
     Report {

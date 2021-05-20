@@ -1,4 +1,5 @@
 #![recursion_limit = "1024"]
+
 use std::cell::RefCell;
 use std::io::Write;
 use std::{collections::HashMap, fmt, fs, io, path};
@@ -7,6 +8,7 @@ use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use log::{info, warn};
 use num_format::{Locale, ToFormattedString};
+use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use unicode_truncate::UnicodeTruncateStr;
 use yahoo_finance::{history, Interval, Timestamped};
@@ -91,6 +93,7 @@ pub struct PortLine {
     pub revenue_usd: f64,
     pub divs_usd: f64,
     pub fees_usd: f64,
+    pub last_trade: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +104,10 @@ pub struct ReportLine {
 }
 
 #[macro_export]
-macro_rules! fmt_report { () => { "{:<15}\t{:>10}\t{:>5.2}" };
+macro_rules! fmt_report {
+    () => {
+        "{:<15}\t{:>10}\t{:>5.2}"
+    };
 }
 
 impl fmt::Display for ReportLine {
@@ -109,14 +115,16 @@ impl fmt::Display for ReportLine {
         write!(
             f,
             fmt_report!(),
-            self.group.unicode_truncate(15).0, self.amount_usd.sep(), (self.amount_perc * 100.0)
+            self.group.unicode_truncate(15).0,
+            self.amount_usd.sep(),
+            (self.amount_perc * 100.0)
         )
     }
 }
 
 #[macro_export]
-macro_rules! fmt_portline { () => 
-    {"{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:<2}"};
+macro_rules! fmt_portline { () =>
+    {"{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:>10}\t{:>2}\t{:<2}"};
 }
 impl PortLine {
     fn from(s: &Stocks) -> PortLine {
@@ -133,6 +141,7 @@ impl PortLine {
             revenue_usd: 0.0,
             divs_usd: 0.0,
             fees_usd: 0.0,
+            last_trade: Utc::now(),
             price: 0.0,
             error: "".to_owned(),
             amount_usd: 0.0,
@@ -193,8 +202,10 @@ impl Separate for f64 {
 }
 
 #[macro_export]
-macro_rules! fmt_trade { () => 
-    {"{:<10}\t{:<10}\t{:<7}\t{:>10}\t{:<25}\t{:>8.2}\t{:>8.2}"};
+macro_rules! fmt_trade {
+    () => {
+        "{:<10}\t{:<10}\t{:<7}\t{:>10}\t{:<25}\t{:>8.2}\t{:>8.2}"
+    };
 }
 
 impl fmt::Display for Trade<'_> {
@@ -243,6 +254,12 @@ impl fmt::Display for PortLine {
             self.units.sep(),
             self.price,
             self.amount_usd.sep(),
+            (self.revenue_usd - self.cost_usd - self.fees_usd).sep(),
+            if Utc::now() - self.last_trade > chrono::Duration::days(365) {
+                "LT"
+            } else {
+                "ST"
+            },
             self.error,
         )
     }
@@ -359,8 +376,11 @@ impl Store<'_> {
         Ok((ct, cs))
     }
 
-    pub fn report(&self, report_type: args::ReportType) -> Result<impl Iterator<Item=ReportLine> + '_> {
-        let port = self.port(false)?;
+    pub fn report(
+        &self,
+        report_type: args::ReportType,
+    ) -> Result<impl Iterator<Item = ReportLine> + '_> {
+        let port = self.port(false, false)?;
         let f = match report_type {
             args::ReportType::Asset => |l: PortLine| l.asset,
             args::ReportType::Currency => |l: PortLine| l.currency,
@@ -368,21 +388,24 @@ impl Store<'_> {
             args::ReportType::Riskyness => |l: PortLine| l.riskyness,
             args::ReportType::Tags => |l: PortLine| l.tags,
         };
-        let groups = port.iter().map(|l| (f((*l).clone()), l.clone())).into_group_map();
-        let rll = groups.into_iter().map(|(k,v)| ReportLine {
+        let groups = port
+            .iter()
+            .map(|l| (f((*l).clone()), l.clone()))
+            .into_group_map();
+        let rll = groups.into_iter().map(|(k, v)| ReportLine {
             group: k.clone(),
             amount_usd: v.iter().fold(0.0, |sum, l| sum + l.amount_usd),
-            amount_perc: v.iter().fold(0.0,|sum, l| sum + l.amount_perc),
+            amount_perc: v.iter().fold(0.0, |sum, l| sum + l.amount_perc),
         });
         Ok(rll)
     }
 
     pub fn total(&self) -> Result<f64> {
-        let port = self.port(false)?;
+        let port = self.port(false, false)?;
         Ok(port.iter().fold(0.0, |sum, pl| sum + pl.amount_usd))
     }
 
-    pub fn port(&self, all: bool) -> Result<Vec<PortLine>> {
+    pub fn port(&self, all: bool, separate_cash: bool) -> Result<Vec<PortLine>> {
         let stocks = self.load_stocks()?;
 
         let mut lines: HashMap<_, _> = stocks
@@ -391,8 +414,10 @@ impl Store<'_> {
             .collect();
 
         let f = |llines: &mut HashMap<String, RefCell<PortLine>>, t: Trade| {
+            // The portfolio line for this stock.
             let mut line = llines.get(t.stock).unwrap().borrow_mut();
 
+            // This holds the cash portfolio line for the account the stock is in.
             let cash = if !t.stock.contains("Cash") {
                 Some(
                     llines
@@ -404,7 +429,20 @@ impl Store<'_> {
                 None
             };
 
-            let amt = |t: &Trade| t.units * t.price.unwrap_or_default() * t.currency;
+            // [Note] Randomization is useful if you are demoing the application
+            // and don't want to show the value of your portfolio.
+            let randomize = false;
+            let mut y: f64 = 1.0;
+
+            if randomize {
+                let mut rng = rand::thread_rng();
+                y = rng.gen();
+            }
+
+            // Total amount of the trade appropriately translated and optionally randomized.
+            let amt = |t: &Trade| t.units * y * t.price.unwrap_or_default() * t.currency;
+            line.last_trade = t.date;
+
             match t.r#type {
                 TradeType::Div => {
                     line.divs_usd += amt(&t);
@@ -449,11 +487,40 @@ impl Store<'_> {
 
         self.trades_fold(&mut lines, f)?;
 
+        // At this point lines contains all the positions, including closed ones
+        // and cash positions for each account. We can now get their current values
+        // using prices, show old prices or currencies and unify the various cash positions
         let mut ll = lines.into_iter().map(move |(_, v)| v.into_inner());
         let mut v = Vec::new();
 
         let prices = self.load_prices()?;
         let utc_now = Utc::now();
+
+        // This contains the total of all cash positions
+        let mut total_cash = if separate_cash {
+            None
+        } else {
+            Some(PortLine {
+                ticker: None,
+                name: "Cash".to_string(),
+                currency: "USD".to_string(),
+                asset: "Cash".to_string(),
+                group: "Cash".to_string(),
+                tags: "Cash".to_string(),
+                riskyness: "A".to_string(),
+                units: 0.0,
+                price: 1.0,
+                error: "".to_string(),
+                amount_usd: 0.0,
+                amount_perc: 0.0,
+                cost_usd: 0.0,
+                revenue_usd: 0.0,
+                divs_usd: 0.0,
+                fees_usd: 0.0,
+                last_trade: Utc::now(),
+            })
+        };
+
         for mut l in &mut ll {
             if let Some(ref pr) = l.ticker {
                 if let Some(p) = prices.get(&pr[..]) {
@@ -481,10 +548,25 @@ impl Store<'_> {
                 }
             }
             if all || Store::is_current_stock(l.units) {
-                v.push(l.clone());
+                if l.asset != "Cash" || (l.asset == "Cash" && separate_cash) {
+                    // In the portfolio line, the revenue includes current value.
+                    // This is done so that the gain shown is relative to the price.
+                    l.revenue_usd += l.amount_usd;
+                    v.push(l.clone());
+                } else {
+                    if let Some(ref mut c) = total_cash {
+                        c.units += l.units;
+                        c.amount_usd += l.units * l.price;
+                    }
+                }
             }
         }
 
+        if let Some(c) = total_cash {
+            v.push(c);
+        }
+
+        // [todo] Refactor to unify with self.total.
         let total = v.iter().fold(0.0, |sum, l| sum + l.amount_usd);
         v.iter_mut().for_each(|mut l| {
             l.amount_perc = l.amount_usd / total;
