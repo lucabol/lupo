@@ -502,7 +502,7 @@ impl Store<'_> {
         } else {
             Some(PortLine {
                 ticker: None,
-                name: "Cash".to_string(),
+                name: "_Cash".to_string(),
                 currency: "USD".to_string(),
                 asset: "Cash".to_string(),
                 group: "Cash".to_string(),
