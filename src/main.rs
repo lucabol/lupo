@@ -83,10 +83,33 @@ async fn run() -> Result<()> {
             store.stocks(name_substring)?;
             Ok(())
         }
-        SubCommand::Port { all, separate_cash } => {
+        SubCommand::Port {
+            all,
+            separate_cash,
+            sort_by,
+        } => {
             let store = Store::open(home_dir)?;
             let mut v = store.port(all, separate_cash)?;
-            v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap());
+
+            if let Some(sort_by_field) = sort_by {
+                match sort_by_field {
+                    SortField::Amount => {
+                        v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap())
+                    }
+                    SortField::Ticker => v.sort_by(|a, b| a.ticker.cmp(&b.ticker)),
+                    SortField::Name => v.sort_by(|a, b| a.name.cmp(&b.name)),
+                    SortField::Currency => v.sort_by(|a, b| a.currency.cmp(&b.currency)),
+                    SortField::Asset => v.sort_by(|a, b| a.asset.cmp(&b.asset)),
+                    SortField::Group => v.sort_by(|a, b| a.group.cmp(&b.group)),
+                    SortField::Tags => v.sort_by(|a, b| a.tags.cmp(&b.tags)),
+                    SortField::Riskyness => v.sort_by(|a, b| a.riskyness.cmp(&b.riskyness)),
+                    SortField::Gain => v.sort_by(|a, b| b.gain.partial_cmp(&a.gain).unwrap()),
+                    SortField::Tax => v.sort_by(|a, b| a.tax_status.cmp(&b.tax_status)),
+                }
+            } else {
+                // By default sorts by name.
+                v.sort_by(|a, b| a.name.cmp(&b.name))
+            }
             println!(
                 fmt_portline!(),
                 "%",

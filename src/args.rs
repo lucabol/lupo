@@ -52,6 +52,10 @@ pub enum SubCommand {
         /// Separate cash positions by account
         #[clap(short, long)]
         separate_cash: bool,
+
+        /// Field to sort positions on
+        #[clap(subcommand)]
+        sort_by: Option<SortField>,
     },
     /// Report on the portfolio exposure to various risks
     Report {
@@ -63,6 +67,20 @@ pub enum SubCommand {
     UpdatePrices {},
     /// Total value of the portfolio
     Total {},
+}
+
+#[derive(Clap)]
+pub enum SortField {
+    Ticker,
+    Name,
+    Amount,
+    Currency,
+    Asset,
+    Group,
+    Tags,
+    Riskyness,
+    Gain,
+    Tax,
 }
 
 #[derive(Clap)]

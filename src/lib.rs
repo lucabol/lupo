@@ -94,6 +94,8 @@ pub struct PortLine {
     pub divs_usd: f64,
     pub fees_usd: f64,
     pub last_trade: DateTime<Utc>,
+    pub gain: f64,
+    pub tax_status: String,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +148,8 @@ impl PortLine {
             error: "".to_owned(),
             amount_usd: 0.0,
             amount_perc: 0.0,
+            gain: 0.0,
+            tax_status: "".to_string(),
         }
     }
 }
@@ -254,12 +258,8 @@ impl fmt::Display for PortLine {
             self.units.sep(),
             self.price,
             self.amount_usd.sep(),
-            (self.revenue_usd - self.cost_usd - self.fees_usd).sep(),
-            if Utc::now() - self.last_trade > chrono::Duration::days(365) {
-                "LT"
-            } else {
-                "ST"
-            },
+            self.gain.sep(),
+            self.tax_status,
             self.error,
         )
     }
@@ -518,6 +518,8 @@ impl Store<'_> {
                 divs_usd: 0.0,
                 fees_usd: 0.0,
                 last_trade: Utc::now(),
+                gain: 0.0,
+                tax_status: "".to_string(),
             })
         };
 
@@ -547,11 +549,21 @@ impl Store<'_> {
                     l.error += "CN";
                 }
             }
+
             if all || Store::is_current_stock(l.units) {
                 if l.asset != "Cash" || (l.asset == "Cash" && separate_cash) {
                     // In the portfolio line, the revenue includes current value.
                     // This is done so that the gain shown is relative to the price.
                     l.revenue_usd += l.amount_usd;
+                    //
+                    // Calculates derived values.
+                    l.gain = l.revenue_usd - l.cost_usd - l.fees_usd;
+                    l.tax_status = if Utc::now() - l.last_trade > chrono::Duration::days(365) {
+                        "LT".to_string()
+                    } else {
+                        "ST".to_string()
+                    };
+
                     v.push(l.clone());
                 } else {
                     if let Some(ref mut c) = total_cash {
