@@ -703,4 +703,10 @@ impl Store<'_> {
 
         self.write_prices(lines)
     }
+    pub fn edit_trades(&self) -> Result<()> {
+        edit::edit_file(self.home_dir.join(TRADES_FILE)).chain_err(|| "Can't open default editor")
+    }
+    pub fn edit_stocks(&self) -> Result<()> {
+        edit::edit_file(self.home_dir.join(STOCKS_FILE)).chain_err(|| "Can't open default editor")
+    }
 }

@@ -35,11 +35,19 @@ pub enum SubCommand {
     Check {},
     /// List all trades in the portfolio
     Trades {
+        /// Edit the trades file by opening the default editor
+        #[clap(short, long)]
+        edit: bool,
+
         /// Includes just trades with name containing the string
         name_substring: Option<String>,
     },
     /// List all stocks known to the program
     Stocks {
+        /// Edit the stocks file by opening the default editor
+        #[clap(short, long)]
+        edit: bool,
+
         /// Includes just stocks with name containing the string
         name_substring: Option<String>,
     },

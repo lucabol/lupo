@@ -69,19 +69,34 @@ async fn run() -> Result<()> {
             println!("{} stocks processed correctly.", cs);
             Ok(())
         }
-        SubCommand::Trades { name_substring } => {
+        SubCommand::Trades {
+            name_substring,
+            edit,
+        } => {
             let store = Store::open(home_dir)?;
-            println!(
-                fmt_trade!(),
-                "ACCOUNT", "DATE", "TYPE", "UNITS", "NAME", "PRICE", "FEES"
-            );
-            store.trades(name_substring)?;
-            Ok(())
+
+            if edit {
+                store.edit_trades()
+            } else {
+                println!(
+                    fmt_trade!(),
+                    "ACCOUNT", "DATE", "TYPE", "UNITS", "NAME", "PRICE", "FEES"
+                );
+                store.trades(name_substring)?;
+                Ok(())
+            }
         }
-        SubCommand::Stocks { name_substring } => {
+        SubCommand::Stocks {
+            name_substring,
+            edit,
+        } => {
             let store = Store::open(home_dir)?;
-            store.stocks(name_substring)?;
-            Ok(())
+            if edit {
+                store.edit_stocks()
+            } else {
+                store.stocks(name_substring)?;
+                Ok(())
+            }
         }
         SubCommand::Port {
             all,
