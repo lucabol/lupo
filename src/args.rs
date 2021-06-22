@@ -1,8 +1,8 @@
 use clap::Clap;
 use std::path::PathBuf;
 
-/// A CLI portfolio manager. Supports multiple currencies and automatic
-/// download of quotes.
+/// Provides portfolio services: tracks trades and position, automatically downloads prices
+/// & reports on portfolio risk factors.
 #[derive(Clap)]
 #[clap(version = "1.0", author)]
 pub struct Opts {

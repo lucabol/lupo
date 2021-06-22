@@ -408,17 +408,13 @@ impl Store<'_> {
     pub fn port(&self, all: bool, separate_cash: bool) -> Result<Vec<PortLine>> {
         let stocks = self.load_stocks()?;
 
-        // Why RefCell below?
-        // My best guess is that the code needs to borrow mutably different elements
-        // inside the hashtable. We humans know it is safe to do so, but the compiler
-        // sees it as multiple mutable borrows of elements of the same structure.
         let mut lines: HashMap<_, _> = stocks
             .values()
             .map(|s| (s.name.clone(), RefCell::new(PortLine::from(s))))
             .collect();
 
         let f = |llines: &mut HashMap<String, RefCell<PortLine>>, t: Trade| {
-            // The portfolio line for this stock. The 1st borrow.
+            // The portfolio line for this stock.
             let mut line = llines.get(t.stock).unwrap().borrow_mut();
 
             // This holds the cash portfolio line for the account the stock is in.
@@ -427,7 +423,7 @@ impl Store<'_> {
                     llines
                         .get(&format!("Cash{}", t.account)[..])
                         .unwrap()
-                        .borrow_mut(), // The 2nd borrow.
+                        .borrow_mut(),
                 )
             } else {
                 None
@@ -435,7 +431,7 @@ impl Store<'_> {
 
             // [Note] Randomization is useful if you are demoing the application
             // and don't want to show the value of your portfolio.
-            let randomize = true;
+            let randomize = false;
             let mut y: f64 = 1.0;
 
             if randomize {
