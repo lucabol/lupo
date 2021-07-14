@@ -653,7 +653,7 @@ impl Store<'_> {
         let stocks = self.load_stocks()?;
         let tickers_port = stocks.values().map(|l| l.ticker.clone());
 
-        let currencies = vec!["EURUSD=X", "GBPUSD=X", "CADUSD=X", "SGDUSD=X"];
+        let currencies = vec!["EURUSD=X", "GBPUSD=X", "CADUSD=X", "SGDUSD=X", "HKDUSD=X"];
         let tickers = tickers_port.chain(currencies.iter().map(|t| Some(t.to_string())));
 
         for ticker in tickers {
