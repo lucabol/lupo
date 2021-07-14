@@ -435,7 +435,7 @@ impl Store<'_> {
 
             // [Note] Randomization is useful if you are demoing the application
             // and don't want to show the value of your portfolio.
-            let randomize = true;
+            let randomize = false;
             let mut y: f64 = 1.0;
 
             if randomize {
