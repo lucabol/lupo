@@ -79,6 +79,7 @@ pub enum SubCommand {
 
 #[derive(Clap)]
 pub enum SortField {
+    Account,
     Ticker,
     Name,
     Amount,

@@ -108,6 +108,7 @@ async fn run() -> Result<()> {
 
             if let Some(sort_by_field) = sort_by {
                 match sort_by_field {
+                    SortField::Account => v.sort_by(|a, b| a.account.cmp(&b.account)),
                     SortField::Amount => {
                         v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap())
                     }
@@ -127,6 +128,7 @@ async fn run() -> Result<()> {
             }
             println!(
                 fmt_portline!(),
+                "ACCOUNT",
                 "%",
                 "TICKER",
                 "NAME",

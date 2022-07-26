@@ -77,6 +77,7 @@ pub struct Stocks {
 
 #[derive(Debug, Clone)]
 pub struct PortLine {
+    pub account: String,
     pub ticker: Option<String>,
     pub name: String,
     pub currency: String,
@@ -126,11 +127,12 @@ impl fmt::Display for ReportLine {
 
 #[macro_export]
 macro_rules! fmt_portline { () =>
-    {"{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:>10}\t{:>2}\t{:<2}"};
+    {"{:<8}{:>5.1}\t{:<10}\t{:<25}\t{:<5}\t{:<10}\t{:<15}\t{:<10}\t{:<1}\t{:>10}\t{:>10.2}\t{:>10}\t{:>10}\t{:>2}\t{:<2}"};
 }
 impl PortLine {
     fn from(s: &Stocks) -> PortLine {
         PortLine {
+            account: "".to_string(),
             ticker: s.ticker.as_ref().map(|s| s.to_owned()),
             name: s.name.to_owned(),
             currency: s.currencyunderlying.to_owned(),
@@ -217,7 +219,7 @@ impl fmt::Display for Trade<'_> {
         write!(
             f,
             fmt_trade!(),
-            self.account.unicode_truncate(10).0,
+            self.account.unicode_truncate(8).0,
             self.date.format("%Y/%m/%d"),
             self.r#type,
             self.units.sep(),
@@ -245,6 +247,7 @@ impl fmt::Display for PortLine {
         write!(
             f,
             fmt_portline!(),
+            self.account.unicode_truncate(10).0,
             (self.amount_perc * 100.0),
             self.ticker
                 .as_ref()
@@ -447,6 +450,11 @@ impl Store<'_> {
             let amt = |t: &Trade| t.units * y * t.price.unwrap_or_default() * t.currency;
             line.last_trade = t.date;
 
+            // TODO: this is incorrect as it sets the account to the latest account where a trade
+            // for this stock was made. It should create a different line item for the same stock
+            // in different accounts.
+            line.account = t.account.to_string();
+
             match t.r#type {
                 TradeType::Div => {
                     line.divs_usd += amt(&t);
@@ -505,6 +513,7 @@ impl Store<'_> {
             None
         } else {
             Some(PortLine {
+                account: "Cash".to_string(),
                 ticker: None,
                 name: "_Cash".to_string(),
                 currency: "USD".to_string(),
