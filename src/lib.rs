@@ -570,7 +570,9 @@ impl Store<'_> {
                     l.revenue_usd += l.amount_usd;
                     //
                     // Calculates derived values.
-                    l.gain = l.revenue_usd - l.cost_usd - l.fees_usd;
+                    if l.asset != "Cash" {
+                        l.gain = l.revenue_usd - l.cost_usd - l.fees_usd;
+                    };
                     l.tax_status = if Utc::now() - l.last_trade > chrono::Duration::days(365) {
                         "LT".to_string()
                     } else {

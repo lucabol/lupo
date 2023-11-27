@@ -111,7 +111,13 @@ async fn run() -> Result<()> {
                     SortField::Account => v.sort_by(|a, b| a.account.cmp(&b.account)),
                     SortField::Amount => {
                         v.sort_by(|a, b| b.amount_usd.partial_cmp(&a.amount_usd).unwrap())
-                    }
+                    },
+                    SortField::Pr => {
+                        v.sort_by(|a, b| a.price.partial_cmp(&b.price).unwrap())
+                    },
+                    SortField::Units => {
+                        v.sort_by(|a, b| a.units.partial_cmp(&b.units).unwrap())
+                    },
                     SortField::Ticker => v.sort_by(|a, b| a.ticker.cmp(&b.ticker)),
                     SortField::Name => v.sort_by(|a, b| a.name.cmp(&b.name)),
                     SortField::Currency => v.sort_by(|a, b| a.currency.cmp(&b.currency)),

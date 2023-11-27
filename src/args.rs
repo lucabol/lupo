@@ -90,6 +90,8 @@ pub enum SortField {
     Riskyness,
     Gain,
     Tax,
+    Pr,
+    Units,
 }
 
 #[derive(Clap)]
